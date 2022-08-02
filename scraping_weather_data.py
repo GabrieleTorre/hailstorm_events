@@ -2,13 +2,13 @@ from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
 from datetime import datetime
 from tqdm import tqdm
-import requests
-
-import re
 import pandas as pd
+import requests
+import re
 
 
 url = "https://eswd.eu/cgi-bin/eswd.cgi"
+
 
 payload = (
             'BUT_adv_query=submit%2Bquery&date_selected=on&start_date={}&' +
@@ -18,6 +18,7 @@ payload = (
             'qc0=on&qc0%2B=on&qc1=on&qc2=on&lastquery=6354318155&lang=en_0&' +
             'action=advanced_query'
         )
+
 
 headers = {
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
