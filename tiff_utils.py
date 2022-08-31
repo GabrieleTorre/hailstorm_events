@@ -1,4 +1,4 @@
-from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RectBivariateSpline, interp2d
 from shapely.geometry import Polygon
 from rasterio.io import MemoryFile
 from shapely.ops import transform
@@ -12,9 +12,11 @@ import pyproj
 def rgb_from_tiff(path):
     img = rasterio.open(path)
     # https://gis.stackexchange.com/questions/341809/merging-sentinel-2-rgb-bands-with-rasterio#355077
+    # 'matplotlib' can only plot 8-bit images between the values of 0 - 255 or floating point values between 0 - 1.
+    # Try dividing the Sentinel 2 data by 10000 before plotting it or use min-max normalization
     image = np.array([img.read(3), img.read(2), img.read(1)])
     p2, p98 = np.percentile(image, (0, 98))
-    image = exposure.rescale_intensity(image, in_range=(p2, p98)) / 100000
+    image = exposure.rescale_intensity(image, in_range=(p2, p98))  # / 100000
     return image
 
 
@@ -33,9 +35,10 @@ def extrapolate(arr, target_dim):
     xx = np.linspace(x.min(), x.max(), target_dim[0])
     yy = np.linspace(y.min(), y.max(), target_dim[1])
 
-    new_kernel = RectBivariateSpline(x, y, z, kx=2, ky=2)
-    result = new_kernel(xx, yy)
+    # new_kernel = RectBivariateSpline(x, y, z, kx=1, ky=2)
+    new_kernel = interp2d(x, y, z, kind='linear')
 
+    result = new_kernel(xx, yy)
     return result
 
 
