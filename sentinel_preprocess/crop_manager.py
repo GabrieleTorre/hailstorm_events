@@ -57,6 +57,8 @@ class crop_manager():
 
             if tiff_f is None:
                 profile = band_f.profile
+                profile['width'] = self.target_dim[0]
+                profile['height'] = self.target_dim[1]
                 profile.update(driver="Gtiff", count=len(self.bands_and_resolutions))
                 tiff_f = MemoryFile().open(**profile)
 
@@ -81,6 +83,8 @@ class crop_manager():
 
             if tiff_f is None:
                 profile = mask_f.profile
+                profile['width'] = self.target_dim[0]
+                profile['height'] = self.target_dim[1]
                 profile.update(driver="Gtiff", count=len(self.masks_and_resolutions))
                 tiff_f = MemoryFile().open(**profile)
 
