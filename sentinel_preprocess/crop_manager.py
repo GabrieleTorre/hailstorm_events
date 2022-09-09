@@ -13,12 +13,21 @@ import geopandas
 import rasterio
 import os
 
+from tqdm import tqdm
 
 class crop_manager():
     def __init__(self):
-        self.bands = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B11", "B12"]
-        self.resolutions = ["R10m", "R10m", "R10m", "R20m", "R20m", "R20m", "R10m", "R20m", "R20m", "R20m"]
+        self.bands = ["B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A",
+                      "B11", "B12"]
+        self.resolutions = ["R10m", "R10m", "R10m", "R20m", "R20m", "R20m",
+                            "R10m", "R20m", "R20m", "R20m"]
+
+        self.masks = ['MSK_CLDPRB']
+        self.masks_resolution = ['20m']
+
         self.bands_and_resolutions = list(zip(self.bands, self.resolutions))
+        self.masks_and_resolutions = list(zip(self.masks, self.masks_resolution))
+
         self.target_dim = (10980, 10980)
         self.id_format = 'n{}e{}'
 
@@ -32,6 +41,7 @@ class crop_manager():
             src_data_dirs.append((name, src_data_dir))
 
         return sorted(src_data_dirs, key=lambda x: x[0])
+
 
     def read_all_bands(self, src_data_dir):
         tiff_f = None
@@ -56,12 +66,43 @@ class crop_manager():
 
         return tiff_f
 
+
+    def read_cloud_masks(self, src_mask_dir):
+        tiff_f = None
+        for i, (mask, resolution) in enumerate(self.masks_and_resolutions, start=1):
+            mask_file = os.path.join(src_mask_dir, 'MSK_CLDPRB_' + resolution + ".jp2")
+
+            mask_f = rasterio.open(mask_file, driver="JP2OpenJPEG")
+            mask_data = mask_f.read(1)
+
+            if mask_data.shape[0] < self.target_dim[0] and mask_data.shape[1] < self.target_dim[1]:
+                mask_data = extrapolate(mask_data, self.target_dim)
+                mask_data = mask_data.astype(mask_f.dtypes[0])
+
+            if tiff_f is None:
+                profile = mask_f.profile
+                profile.update(driver="Gtiff", count=len(self.masks_and_resolutions))
+                tiff_f = MemoryFile().open(**profile)
+
+            # print("Writing band {} for date {}".format(band, date))
+            tiff_f.write(mask_data, i)
+            mask_f.close()
+
+        return tiff_f
+
+
     def create_crops_data(self, safe_data_path, numpy_root_data_dir, tile='T32TPQ'):
         _name = safe_data_path.split('/')[-1].split(".")[0]
         curr_data_dir = glob(os.path.join(safe_data_path, "GRANULE/*/IMG_DATA"))[0]
 
-        npname = _name.split('/')[-1].split('_')[2].split('T')[0] + '.npy'
+        curr_mask_dir = ['/'] + curr_data_dir.split('/')[:-1] + ["QI_DATA"]
+        curr_mask_dir = os.path.join(*curr_mask_dir)
+
+        npname = _name.split('/')[-1].split('_')[2].split('T')[0]
+
         dataset = crop_manager().read_all_bands(curr_data_dir)
+        cldmask = crop_manager().read_cloud_masks(curr_mask_dir)
+
         x_list = y_list = [i * 128 for i in range(10980 // 128 - 1)]  # si esclude una striscia (inferiore a 128)
 
         for pixel_x, pixel_y in itertools.product(x_list, y_list):
@@ -86,4 +127,9 @@ class crop_manager():
 
             # crop 128x128 partendo da coordinate top-left
             _frame = dataset.read(window=Window(pixel_x, pixel_y, 128, 128))
-            np.save(os.path.join(_path, npname), _frame)
+            np.save(os.path.join(_path, npname + '.npy'), _frame)
+
+            _mask = cldmask.read(window=Window(pixel_x, pixel_y, 128, 128))
+            cloudP_dir = os.path.join(_path , 'cloudProb')
+            if os.path.isdir(cloudP_dir) == False: os.mkdir(cloudP_dir)
+            np.save(os.path.join(cloudP_dir, npname+'.npy'), _mask)
